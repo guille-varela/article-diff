@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor de artículos · Versiones y ramas</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
+    --accent:#2563eb; --accent-soft:#eff4ff;
+    --add-bg:#e6ffed; --add-line:#22863a; --add-word:#aaf2c0;
+    --del-bg:#ffeef0; --del-line:#cb2431; --del-word:#ffc4cc;
+    --open:#9a6700; --open-bg:#fff8e1; --merged:#6f42c1; --merged-bg:#f3eefb; --rejected:#6b7280;
+    --shadow:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6}
+  .app{display:grid;grid-template-columns:320px 1fr;height:100vh}
+  button{font:inherit;cursor:pointer}
+  code{font-size:.85em;background:#eef0f3;padding:1px 5px;border-radius:5px}
+
+  /* ---------- Sidebar ---------- */
+  aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .side-head{padding:16px 16px 0}
+  .side-head h1{margin:0 0 12px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .tabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:3px}
+  .tabs button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:600;font-size:13px;padding:7px;border-radius:6px}
+  .tabs button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+  .side-body{overflow:auto;padding:14px 12px;flex:1;min-height:0}
+  .side-foot{border-top:1px solid var(--line);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .ghostbtn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted)}
+  .ghostbtn:hover{background:var(--bg)}
+
+  /* timeline rows */
+  .node{position:relative;padding:10px 12px 10px 40px;border-radius:10px;cursor:pointer;border:1px solid transparent;margin-bottom:3px}
+  .node:hover{background:var(--bg)}
+  .node.sel{background:var(--accent-soft);border-color:#cfe0ff}
+  .node .dot{position:absolute;left:16px;top:15px;width:11px;height:11px;border-radius:50%;background:#cdd3dc;border:2px solid var(--panel);z-index:2}
+  .node.commit .dot{background:var(--accent)}
+  .node.branchnode .dot{background:var(--open)}
+  .node.mergenode .dot{background:var(--merged)}
+  .spine{position:absolute;left:21px;top:0;bottom:0;width:2px;background:var(--line);z-index:1}
+  .ntitle{font-weight:600;font-size:14px;display:flex;align-items:center;gap:7px}
+  .nmeta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .nsum{font-size:12px;color:#4b5563;margin-top:5px}
+  .avatar{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;flex:none}
+  .vtag{font-size:10px;font-weight:700;background:var(--accent);color:#fff;padding:1px 6px;border-radius:20px}
+  .status{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em}
+  .status.open{background:var(--open-bg);color:var(--open)}
+  .status.merged{background:var(--merged-bg);color:var(--merged)}
+  .status.rejected{background:#f1f1f3;color:var(--rejected)}
+
+  /* ramas view */
+  .group-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin:6px 6px 8px}
+  .branch-attach{margin-left:24px;border-left:2px dashed var(--open);padding-left:0}
+  .branch-attach .node{margin-left:0}
+  .branch-attach .node .dot{left:-8px}
+  .empty{color:var(--muted);font-size:13px;font-style:italic;padding:8px 6px}
+
+  /* ---------- Main ---------- */
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .toolbar{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .doc-title{font-size:16px;font-weight:700;margin:0;flex:1;min-width:140px}
+  .user-pick{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted)}
+  .user-pick select{font:inherit;font-size:13px;padding:5px 8px 5px 6px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .primary{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px}
+  .primary:hover{filter:brightness(1.05)}
+  .secondary{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px;color:var(--ink)}
+  .secondary:hover{background:var(--bg)}
+  .success{background:var(--add-line);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px}
+  .danger{background:#fff;border:1px solid #f0c2c8;color:var(--del-line);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px}
+  .toggle{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:2px}
+  .toggle button{font-size:13px;font-weight:600;border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:7px}
+  .toggle button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+
+  .ctxbar{background:#fafbfc;border-bottom:1px solid var(--line);padding:11px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px}
+  .ctxbar .who{display:flex;align-items:center;gap:7px;font-weight:600}
+  .warn{background:var(--open-bg);color:var(--open);border:1px solid #f0e0a8;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600}
+  .spacer{flex:1}
+
+  .stage{overflow:auto;padding:26px;flex:1;min-height:0}
+
+  /* legend + summary */
+  .legend{display:flex;gap:13px;font-size:12px;color:var(--muted);align-items:center;flex-wrap:wrap}
+  .sw{width:13px;height:13px;border-radius:3px;display:inline-block}
+  .sw.add{background:var(--add-bg);border:1px solid var(--add-line)}
+  .sw.del{background:var(--del-bg);border:1px solid var(--del-line)}
+  .summary-bar{max-width:760px;margin:0 auto 16px;display:flex;gap:8px;align-items:center}
+  .pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px}
+  .pill.add{background:var(--add-bg);color:var(--add-line)}
+  .pill.del{background:var(--del-bg);color:var(--del-line)}
+  .pill.same{background:var(--bg);color:var(--muted)}
+
+  /* unified diff */
+  .unified{max-width:760px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px 44px}
+  .unified p,.col p{margin:0 0 15px}
+  .ln{position:relative;padding-left:24px}
+  .ln::before{position:absolute;left:0;font-weight:700;font-size:13px}
+  .ln.add{background:var(--add-bg);margin:0 -10px 15px;padding:6px 10px 6px 28px;border-radius:6px}
+  .ln.add::before{content:"+";color:var(--add-line);left:8px;top:6px}
+  .ln.del{background:var(--del-bg);margin:0 -10px 15px;padding:6px 10px 6px 28px;border-radius:6px}
+  .ln.del::before{content:"\2212";color:var(--del-line);left:8px;top:6px}
+  .ln.del .txt{text-decoration:line-through;text-decoration-color:rgba(203,36,49,.55)}
+  .ln.mod{background:#fffdf2;margin:0 -10px 15px;padding:6px 10px 6px 28px;border-radius:6px;border-left:3px solid #e3b341}
+  .ln.mod::before{content:"\270E";color:#b08800;left:7px;top:6px;font-size:12px}
+  del.w-del,.w-del{background:var(--del-word);color:#86181d;text-decoration:line-through;text-decoration-color:rgba(134,24,29,.6);border-radius:3px;padding:0 2px}
+  ins.w-add,.w-add{background:var(--add-word);color:#165c2c;text-decoration:underline;text-decoration-thickness:2px;border-radius:3px;padding:0 2px}
+
+  /* split diff */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;max-width:1100px;margin:0 auto}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .col-head{padding:10px 18px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+  .col.old .col-head{background:#fff6f7}.col.new .col-head{background:#f4fff7}
+  .col-body{padding:24px 26px}
+  .row-add{background:var(--add-bg);margin:0 -12px 15px;padding:6px 12px;border-radius:6px}
+  .row-del{background:var(--del-bg);margin:0 -12px 15px;padding:6px 12px;border-radius:6px}
+  .row-del .txt{text-decoration:line-through;text-decoration-color:rgba(203,36,49,.5)}
+  .ghost{visibility:hidden}
+
+  /* editor */
+  .editor{max-width:760px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .editor-head{padding:14px 20px;border-bottom:1px solid var(--line);font-weight:600;background:#fafbfc}
+  .editor textarea{width:100%;border:0;outline:0;padding:24px 26px;font:inherit;font-size:15px;line-height:1.7;resize:vertical;min-height:320px;color:var(--ink)}
+  .editor textarea:focus{background:#fffef9}
+  .editor-foot{border-top:1px solid var(--line);padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fafbfc}
+  .editor-foot input[type=text]{font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px;flex:1}
+  .hint{font-size:12px;color:var(--muted);max-width:760px;margin:14px auto 0}
+
+  /* barra de formato + editor enriquecido */
+  .rte-toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line);background:#fafbfc;position:sticky;top:0;z-index:3}
+  .rte-toolbar .grp{display:flex;gap:2px}
+  .rte-toolbar .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+  .tb{border:1px solid transparent;background:transparent;color:#3b4252;border-radius:7px;padding:6px 9px;font-size:13px;min-width:32px;line-height:1}
+  .tb:hover{background:#eef0f3}
+  .tb.act{background:var(--accent-soft);border-color:#cfe0ff;color:var(--accent)}
+  .rte{min-height:340px;padding:26px 30px;outline:0;font-size:16px;line-height:1.7;color:var(--ink)}
+  .rte:focus{background:#fffef9}
+  .rte:empty::before{content:"Empieza a escribir…";color:var(--muted)}
+
+  /* estilos de contenido compartidos (lectura, diff y editor) */
+  .read h2,.unified h2,.col-body h2,.rte h2{font-size:24px;font-weight:700;line-height:1.25;margin:0 0 14px}
+  .read h3,.unified h3,.col-body h3,.rte h3{font-size:18px;font-weight:700;line-height:1.3;margin:0 0 12px}
+  .read blockquote,.unified blockquote,.col-body blockquote,.rte blockquote{margin:0 0 15px;padding:6px 0 6px 16px;border-left:3px solid #cbd5e1;color:#475569;font-style:italic}
+  .read a,.unified a,.col-body a,.rte a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+  .read ul,.read ol,.unified ul,.unified ol,.col-body ul,.col-body ol,.rte ul,.rte ol{margin:0 0 15px;padding-left:22px}
+  .read li,.unified li,.col-body li,.rte li{margin:0 0 4px}
+  .read strong,.unified strong,.col-body strong,.rte strong{font-weight:700}
+  .ln h2,.ln h3,.ln blockquote,.row-add h2,.row-add h3,.row-del h2,.row-del h3{margin-bottom:0}
+  .tagchg{display:inline-block;font-size:10px;font-weight:700;color:#b08800;background:#fffbe6;border:1px solid #f0e0a8;border-radius:5px;padding:0 5px;margin-left:6px;vertical-align:middle}
+
+  /* read view */
+  .read{max-width:760px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px 44px}
+  .read p{margin:0 0 15px}
+  .modal-note{max-width:760px;margin:0 auto 14px;background:var(--accent-soft);border:1px solid #cfe0ff;border-radius:10px;padding:12px 16px;font-size:13px;color:#1e40af}
+
+  /* ---------- Revisión: notas + comentarios ---------- */
+  .review-wrap{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;max-width:1200px;margin:0 auto}
+  .review-main{min-width:0}
+  .notes-rail{position:sticky;top:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;max-height:calc(100vh - 200px);overflow:auto}
+  .notes-head{font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .notes-head .count{background:var(--accent);color:#fff;font-size:11px;border-radius:20px;padding:1px 8px}
+  .notes-hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .notes-empty{font-size:13px;color:var(--muted);font-style:italic;padding:10px 0}
+  .notes-sub{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:14px 0 8px;border-top:1px solid var(--line);padding-top:10px}
+  .note{border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;background:#fff}
+  .note.res{opacity:.6}
+  .note-top{display:flex;align-items:center;gap:6px;font-size:13px}
+  .note-date{color:var(--muted);font-size:11px;margin-left:auto}
+  .note-quote{font-size:12px;color:#7a5c00;background:#fff8e1;border-left:3px solid #f0c850;border-radius:4px;padding:4px 8px;margin:7px 0;font-style:italic}
+  .note-text{font-size:13px;line-height:1.5;margin-bottom:6px}
+  .note-link{display:inline-block;font-size:12px;color:var(--accent);word-break:break-all;margin-bottom:6px}
+  .note-img{display:block;max-width:100%;border-radius:8px;border:1px solid var(--line);margin-bottom:6px}
+  .note-assign{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-bottom:6px}
+  .note-actions{display:flex;gap:12px}
+  .linkbtn{border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:600;padding:0}
+  .linkbtn.dgr{color:var(--del-line)}
+  .cmt-hl{background:#fff3bf;border-bottom:2px solid #f0c850;border-radius:2px;cursor:pointer;padding:0 1px}
+  .cmt-hl.res{background:#eef0f3;border-bottom-color:#cdd3dc}
+  .cmt-hl.focus{background:#ffe48a;box-shadow:0 0 0 2px #f0c850}
+
+  .cmt-bubble{position:absolute;z-index:40;background:#1f2430;color:#fff;font-size:12px;font-weight:600;padding:6px 11px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;white-space:nowrap}
+  .cmt-bubble::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1f2430;border-bottom:0}
+  .cmt-pop{position:absolute;z-index:41;width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(16,24,40,.18);padding:12px}
+  .pop-quote{font-size:12px;color:#7a5c00;background:#fff8e1;border-radius:6px;padding:6px 8px;margin-bottom:8px;font-style:italic}
+  .cmt-pop textarea{width:100%;min-height:64px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13px;resize:vertical;outline:0}
+  .cmt-pop textarea:focus{border-color:var(--accent)}
+  .pop-assign{display:block;font-size:12px;color:var(--muted);margin:8px 0}
+  .pop-assign select{font:inherit;font-size:13px;padding:5px;border:1px solid var(--line);border-radius:7px;margin-left:6px}
+  .pop-attach{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .chipbtn{border:1px solid var(--line);background:#fff;border-radius:18px;padding:5px 10px;font-size:12px;color:var(--ink);cursor:pointer}
+  .chipbtn:hover{background:var(--bg)}
+  .attach-info{font-size:11px;color:var(--add-line)}
+  .pop-actions{display:flex;gap:8px}
+  .pop-actions .primary,.pop-actions .secondary{padding:7px 12px}
+
+  @media(max-width:1000px){.review-wrap{grid-template-columns:1fr}.notes-rail{position:static;max-height:none}}
+  @media(max-width:900px){.app{grid-template-columns:1fr}aside{display:none}.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="side-head">
+      <h1>Historial</h1>
+      <div class="tabs" id="tabs">
+        <button data-tab="cronologia" class="on">Cronología</button>
+        <button data-tab="ramas">Ramas</button>
+      </div>
+    </div>
+    <div class="side-body" id="sidebody"></div>
+    <div class="side-foot">
+      <span style="font-size:12px;color:var(--muted)">Prototipo local</span>
+      <button class="ghostbtn" id="resetBtn">Reiniciar demo</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <h2 class="doc-title">El auge del trabajo remoto</h2>
+      <div class="user-pick">
+        <span>Sesión:</span>
+        <select id="userSel"></select>
+        <span class="status" id="roleBadge"></span>
+      </div>
+      <div class="toggle" id="diffToggle">
+        <button data-mode="unified" class="on">Unificada</button>
+        <button data-mode="split">Dividida</button>
+      </div>
+      <button class="primary" id="editBtn">✎ Editar</button>
+    </div>
+    <div class="ctxbar" id="ctxbar"></div>
+    <div class="stage"><div id="stage"></div></div>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   DIFF (LCS, sin dependencias) — ahora por BLOQUES con HTML
+   ============================================================ */
+const splitWords = t => t.match(/(\s+|[^\s]+)/g) || [];
+const norm = s => s.replace(/\s+/g," ").trim().toLowerCase();
+const esc = s => s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+// Etiqueta legible para cada tipo de bloque
+const BLOCK_NAME={h1:"Título",h2:"Título",h3:"Subtítulo",p:"Párrafo",blockquote:"Cita",ul:"Lista",ol:"Lista numerada",li:"Elemento"};
+
+// Parsea HTML en bloques {tag, html (interno), text}
+function splitBlocks(html){
+  const d=document.createElement("div"); d.innerHTML=html||"";
+  const blocks=[];
+  d.childNodes.forEach(node=>{
+    if(node.nodeType===1){
+      const tag=node.tagName.toLowerCase();
+      blocks.push({tag, html:node.innerHTML.trim(), text:node.textContent.trim()});
+    }else if(node.nodeType===3 && node.textContent.trim()){
+      blocks.push({tag:"p", html:esc(node.textContent.trim()), text:node.textContent.trim()});
+    }
+  });
+  return blocks.filter(b=>b.text||b.tag==="ul"||b.tag==="ol");
+}
+
+function lcsDiff(a,b,eq){
+  const n=a.length,m=b.length,dp=Array.from({length:n+1},()=>new Int32Array(m+1));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)
+    dp[i][j]=eq(a[i],b[j])?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  const out=[];let i=0,j=0;
+  while(i<n&&j<m){
+    if(eq(a[i],b[j])){out.push({type:"equal",a:a[i],b:b[j]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){out.push({type:"del",a:a[i]});i++;}
+    else{out.push({type:"add",b:b[j]});j++;}
+  }
+  while(i<n)out.push({type:"del",a:a[i++]});
+  while(j<m)out.push({type:"add",b:b[j++]});
+  return out;
+}
+function similarity(x,y){
+  const sx=new Set(norm(x).split(" ")),sy=new Set(norm(y).split(" "));
+  let inter=0;sx.forEach(w=>{if(sy.has(w))inter++;});
+  return inter/(sx.size+sy.size-inter||1);
+}
+// Empareja bloques eliminados/añadidos como 'mod' por mejor similitud (no solo posición)
+function pairOps(ops){
+  const res=[];let i=0;
+  while(i<ops.length){
+    if(ops[i].type==="equal"){res.push(ops[i]);i++;continue;}
+    const dels=[],adds=[];
+    while(i<ops.length&&ops[i].type==="del"){dels.push(ops[i].a);i++;}
+    while(i<ops.length&&ops[i].type==="add"){adds.push(ops[i].b);i++;}
+    const usedB=new Set(),modByX={},cands=[];
+    for(let x=0;x<dels.length;x++)for(let y=0;y<adds.length;y++){
+      const s=similarity(dels[x].text,adds[y].text);
+      if(s>0.35)cands.push({x,y,s});
+    }
+    cands.sort((p,q)=>q.s-p.s);
+    const usedX=new Set();
+    for(const c of cands){if(usedX.has(c.x)||usedB.has(c.y))continue;usedX.add(c.x);usedB.add(c.y);modByX[c.x]=c.y;}
+    for(let x=0;x<dels.length;x++){
+      if(modByX[x]!==undefined)res.push({type:"mod",a:dels[x],b:adds[modByX[x]]});
+      else res.push({type:"del",a:dels[x]});
+    }
+    for(let y=0;y<adds.length;y++)if(!usedB.has(y))res.push({type:"add",b:adds[y]});
+  }
+  return res;
+}
+function wordDiffHtml(oldT,newT,side){
+  const ops=lcsDiff(splitWords(oldT),splitWords(newT),(x,y)=>x===y);
+  let html="",buf="",run=null;
+  const flush=()=>{if(!buf){run=null;return;}
+    if(run==="equal")html+=esc(buf);
+    else if(run==="del"){if(side!=="new")html+='<del class="w-del">'+esc(buf)+'</del>';}
+    else if(run==="add"){if(side!=="old")html+='<ins class="w-add">'+esc(buf)+'</ins>';}
+    buf="";run=null;};
+  for(const op of ops){const t=op.type;const txt=op.type==="del"?op.a:op.type==="add"?op.b:op.a;
+    if(t!==run){flush();run=t;}buf+=txt;}
+  flush();return html;
+}
+const computeDiff=(base,head)=>pairOps(lcsDiff(splitBlocks(base),splitBlocks(head),(x,y)=>x.tag===y.tag&&norm(x.text)===norm(y.text)));
+
+// Envuelve contenido en su etiqueta de bloque
+const wrapBlock=(tag,inner)=>`<${tag}>${inner}</${tag}>`;
+// Word-diff sobre el texto plano del bloque, respetando la etiqueta
+function blockWordDiff(a,b,side){
+  const tag=(side==="old"?a.tag:b.tag);
+  const changedTag=a.tag!==b.tag?`<span class="tagchg">⇄ ${BLOCK_NAME[b.tag]||b.tag}</span>`:"";
+  return wrapBlock(tag, wordDiffHtml(a.text,b.text,side))+changedTag;
+}
+
+function renderUnified(ops){
+  let body="",a=0,r=0,m=0;
+  for(const op of ops){
+    if(op.type==="equal")body+=`<div class="ln">${wrapBlock(op.a.tag,op.a.html)}</div>`;
+    else if(op.type==="del"){r++;body+=`<div class="ln del">${wrapBlock(op.a.tag,op.a.html)}</div>`;}
+    else if(op.type==="add"){a++;body+=`<div class="ln add">${wrapBlock(op.b.tag,op.b.html)}</div>`;}
+    else if(op.type==="mod"){m++;body+=`<div class="ln mod">${blockWordDiff(op.a,op.b,"both")}</div>`;}
+  }
+  return summaryBar(a,r,m)+`<div class="unified">${body}</div>`;
+}
+function renderSplit(ops,oldLabel,newLabel){
+  let L="",R="",a=0,r=0,m=0;
+  for(const op of ops){
+    if(op.type==="equal"){L+=`<div>${wrapBlock(op.a.tag,op.a.html)}</div>`;R+=`<div>${wrapBlock(op.b.tag,op.b.html)}</div>`;}
+    else if(op.type==="del"){r++;L+=`<div class="row-del">${wrapBlock(op.a.tag,op.a.html)}</div>`;R+=`<div class="ghost">${wrapBlock(op.a.tag,op.a.html)}</div>`;}
+    else if(op.type==="add"){a++;L+=`<div class="ghost">${wrapBlock(op.b.tag,op.b.html)}</div>`;R+=`<div class="row-add">${wrapBlock(op.b.tag,op.b.html)}</div>`;}
+    else if(op.type==="mod"){m++;L+=`<div class="row-del">${blockWordDiff(op.a,op.b,"old")}</div>`;R+=`<div class="row-add">${blockWordDiff(op.a,op.b,"new")}</div>`;}
+  }
+  return summaryBar(a,r,m)+`<div class="split">
+    <div class="col old"><div class="col-head">${esc(oldLabel)} <span>ANTES</span></div><div class="col-body">${L}</div></div>
+    <div class="col new"><div class="col-head">${esc(newLabel)} <span>DESPUÉS</span></div><div class="col-body">${R}</div></div></div>`;
+}
+const summaryBar=(a,r,m)=>`<div class="summary-bar"><span class="pill add">+${a} añadidos</span><span class="pill del">−${r} eliminados</span><span class="pill same">✎ ${m} modificados</span></div>`;
+function renderRead(text){return `<div class="read">${splitBlocks(text).map(b=>wrapBlock(b.tag,b.html)).join("")}</div>`;}
+
+/* ============================================================
+   BARRA DE FORMATO (editor enriquecido)
+   ============================================================ */
+function toolbarHtml(){
+  return `<div class="rte-toolbar" id="rtebar">
+    <div class="grp">
+      <button class="tb" data-block="p" title="Párrafo">¶</button>
+      <button class="tb" data-block="h2" title="Título">H2</button>
+      <button class="tb" data-block="h3" title="Subtítulo">H3</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <button class="tb" data-cmd="bold" title="Negrita (⌘B)"><b>B</b></button>
+      <button class="tb" data-cmd="italic" title="Cursiva (⌘I)"><i>I</i></button>
+      <button class="tb" data-link="1" title="Enlace (⌘K)">🔗</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <button class="tb" data-cmd="insertUnorderedList" title="Lista">• Lista</button>
+      <button class="tb" data-cmd="insertOrderedList" title="Lista numerada">1. Lista</button>
+      <button class="tb" data-block="blockquote" title="Cita">❝ Cita</button>
+    </div>
+    <div class="sep"></div>
+    <div class="grp">
+      <button class="tb" data-cmd="removeFormat" title="Quitar formato">✕ Formato</button>
+    </div>
+  </div>`;
+}
+function exec(cmd,val){ document.getElementById("ta").focus(); document.execCommand(cmd,false,val); updateToolbarState(); }
+function setBlock(tag){ exec("formatBlock", tag); }
+function wireToolbar(){
+  const bar=document.getElementById("rtebar"), ed=document.getElementById("ta");
+  bar.querySelectorAll(".tb").forEach(btn=>{
+    btn.addEventListener("mousedown",e=>e.preventDefault());   // no perder la selección
+    btn.onclick=()=>{
+      if(btn.dataset.cmd) exec(btn.dataset.cmd);
+      else if(btn.dataset.block) setBlock(btn.dataset.block);
+      else if(btn.dataset.link){
+        const url=prompt("URL del enlace:","https://");
+        if(url) exec("createLink",url);
+      }
+    };
+  });
+  ed.addEventListener("keyup",updateToolbarState);
+  ed.addEventListener("mouseup",updateToolbarState);
+  ed.addEventListener("keydown",e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();const u=prompt("URL del enlace:","https://");if(u)exec("createLink",u);}
+  });
+  updateToolbarState();
+}
+function updateToolbarState(){
+  const bar=document.getElementById("rtebar"); if(!bar)return;
+  let block="";
+  try{ block=(document.queryCommandValue("formatBlock")||"").toLowerCase(); }catch(e){}
+  bar.querySelectorAll(".tb").forEach(b=>{
+    let on=false;
+    if(b.dataset.cmd){ try{on=document.queryCommandState(b.dataset.cmd);}catch(e){} }
+    else if(b.dataset.block){ on = (block===b.dataset.block) || (b.dataset.block==="p"&&(block===""||block==="div")); }
+    b.classList.toggle("act",on);
+  });
+}
+
+/* Saneado: convierte el HTML del editor a un subconjunto seguro de bloques */
+const BLOCK_OK=new Set(["h2","h3","p","blockquote","ul","ol","li"]);
+const INLINE_OK=new Set(["strong","em","a","br"]);
+function sanitizeNodes(nodes){
+  let out="";
+  nodes.forEach(n=>{
+    if(n.nodeType===3){ out+=esc(n.textContent); return; }
+    if(n.nodeType!==1) return;
+    let tag=n.tagName.toLowerCase();
+    if(tag==="script"||tag==="style") return;   // descartar por completo
+    if(tag==="div") tag="p";
+    if(tag==="b") tag="strong";
+    if(tag==="i") tag="em";
+    if(BLOCK_OK.has(tag)){
+      const inner=sanitizeNodes(n.childNodes);
+      if(inner.trim()||tag==="ul"||tag==="ol") out+=`<${tag}>${inner}</${tag}>`;
+    }else if(tag==="br"){ out+="<br>"; }
+    else if(tag==="a"){ out+=`<a href="${esc(n.getAttribute("href")||"#")}">${sanitizeNodes(n.childNodes)}</a>`; }
+    else if(INLINE_OK.has(tag)){ out+=`<${tag}>${sanitizeNodes(n.childNodes)}</${tag}>`; }
+    else { out+=sanitizeNodes(n.childNodes); }   // desenvuelve span/font/etc.
+  });
+  return out;
+}
+function getEditorHtml(){ return sanitizeNodes(document.getElementById("ta").childNodes); }
+
+/* ============================================================
+   ESTADO + PERSISTENCIA
+   ============================================================ */
+const KEY="editor-versiones-v2";
+const USERS=[
+  {id:"u1",name:"Guille",color:"#2563eb",role:"admin"},
+  {id:"u2",name:"Marta",color:"#7c3aed",role:"editor"},
+  {id:"u3",name:"Lucía",color:"#0891b2",role:"admin"},
+  {id:"u4",name:"Diego",color:"#db2777",role:"editor"}
+];
+const ROLE_LABEL={admin:"Admin",editor:"Editor"};
+const initials=n=>n.split(" ").map(s=>s[0]).join("").slice(0,2).toUpperCase();
+const userById=id=>USERS.find(u=>u.id===id);
+const admins=()=>USERS.filter(u=>u.role==="admin");
+const currentUser=()=>userById(S.currentUserId);
+const canPublish=uid=>userById(uid).role==="admin";   // aprobar = publicar
+const fmtDate=ts=>new Date(ts).toLocaleString("es-ES",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+
+let S;
+function seed(){
+  const base=Date.UTC(2026,5,3,9,14);
+  const day=86400000;
+  const mk=(n,label,uid,d,text,mergedFrom)=>({id:"v"+n,n,label,author:uid,ts:base+d*day,text,mergedFrom:mergedFrom||null});
+  const main=[
+    mk(1,"Borrador inicial","u1",0,
+"<p>El trabajo remoto ha dejado de ser una excepción para convertirse en una norma. Cada vez más empresas adoptan modelos flexibles.</p><p>Los empleados valoran la libertad de organizar su tiempo. Sin embargo, algunos echan de menos el contacto con sus compañeros.</p><p>Las herramientas digitales han hecho posible esta transición. Sin ellas, la colaboración a distancia sería impensable.</p>"),
+    mk(2,"Añade dato de respaldo","u2",2,
+"<p>El trabajo remoto ha dejado de ser una excepción para convertirse en una norma. Cada vez más empresas adoptan modelos flexibles.</p><p>Según un estudio reciente de Stanford, el <strong>60% de los profesionales</strong> preferiría mantener un esquema híbrido de forma permanente.</p><p>Los empleados valoran la libertad de organizar su tiempo. Sin embargo, algunos echan de menos el contacto con sus compañeros.</p><p>Las herramientas digitales han hecho posible esta transición. Sin ellas, la colaboración a distancia sería impensable.</p>"),
+    mk(3,"Reescritura de la entrada","u1",6,
+"<h2>El trabajo remoto, la nueva normalidad</h2><p>El trabajo remoto ha dejado de ser una excepción para convertirse en la norma habitual del mundo laboral. Cada vez más empresas adoptan modelos flexibles y descentralizados.</p><p>Según un estudio reciente de Stanford, el <strong>60% de los profesionales</strong> preferiría mantener un esquema híbrido de forma permanente.</p><p>Los empleados valoran enormemente la libertad de organizar su tiempo y su espacio. Sin embargo, muchos echan de menos el contacto diario con sus compañeros.</p><p>Las herramientas digitales han hecho posible esta transición. Sin ellas, la colaboración a distancia sería impensable.</p>"),
+    mk(4,"Equilibra el argumento","u3",12,
+"<h2>El trabajo remoto, la nueva normalidad</h2><p>El trabajo remoto ha dejado de ser una excepción para convertirse en la norma habitual del mundo laboral. Cada vez más empresas adoptan modelos flexibles y descentralizados.</p><p>Según un estudio reciente de Stanford, el <strong>60% de los profesionales</strong> preferiría mantener un esquema híbrido de forma permanente.</p><p>Los empleados valoran enormemente la libertad de organizar su tiempo y su espacio. Sin embargo, muchos echan de menos el contacto diario con sus compañeros.</p><p>El reto, por tanto, no es elegir entre oficina y hogar, sino diseñar culturas de trabajo que combinen lo mejor de ambos mundos.</p>")
+  ];
+  const branches=[{
+    id:"b1",name:"correcciones-de-estilo",author:"u2",assignedTo:"u1",baseN:4,
+    status:"open",createdTs:base+15*day,approvedBy:null,approvedTs:null,mergedToN:null,
+    text:"<h2>El trabajo remoto, la nueva normalidad</h2><p>El trabajo remoto ha dejado de ser una excepción para convertirse en la norma habitual del mundo laboral. Cada vez más empresas adoptan modelos flexibles, descentralizados y orientados a resultados.</p><p>Según un <a href=\"https://stanford.edu\">estudio de Stanford</a> publicado este año, el <strong>60% de los profesionales</strong> preferiría mantener un esquema híbrido de forma permanente.</p><p>Los empleados valoran enormemente la libertad de organizar su tiempo y su espacio. Aun así, muchos echan de menos el contacto diario con sus compañeros.</p><blockquote>El reto no es elegir entre oficina y hogar, sino diseñar culturas de trabajo que combinen lo mejor de ambos mundos.</blockquote>",
+    comments:[{
+      id:"c1",author:"u1",assignedTo:"u2",quote:"orientados a resultados",
+      text:"¿Podemos citar una fuente para esto? Suena a afirmación que conviene respaldar.",
+      link:"https://hbr.org",image:null,ts:base+16*day,resolved:false
+    }]
+  }];
+  return {users:USERS,currentUserId:"u1",main,branches,nextBranch:2,
+    tab:"cronologia",diffMode:"unified",
+    sel:{type:"branch",id:"b1"},editing:false};
+}
+function load(){try{const r=localStorage.getItem(KEY);S=r?JSON.parse(r):seed();}catch(e){S=seed();}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function reset(){S=seed();save();render();}
+
+/* helpers de modelo */
+const mainHead=()=>S.main[S.main.length-1];
+const mainByN=n=>S.main.find(v=>v.n===n);
+const branchById=id=>S.branches.find(b=>b.id===id);
+const lastN=()=>Math.max(...S.main.map(v=>v.n));
+
+/* ============================================================
+   ACCIONES
+   ============================================================ */
+function proposeBranch(text,name,assignedTo){
+  const id="b"+S.nextBranch++;
+  S.branches.push({id,name:name||("rama-"+id),author:S.currentUserId,assignedTo:assignedTo||admins()[0].id,
+    baseN:mainHead().n,status:"open",createdTs:Date.now(),approvedBy:null,approvedTs:null,mergedToN:null,text,comments:[]});
+  S.editing=false;S.sel={type:"branch",id};save();render();
+  return id;
+}
+function addComment(branchId,data){
+  const b=branchById(branchId);if(!b.comments)b.comments=[];
+  b.comments.push({id:"c"+Date.now(),author:S.currentUserId,assignedTo:data.assignedTo||null,
+    quote:data.quote||"",text:data.text||"",link:data.link||null,image:data.image||null,ts:Date.now(),resolved:false});
+  save();render();
+}
+function resolveComment(branchId,cid){
+  const c=branchById(branchId).comments.find(x=>x.id===cid);if(c){c.resolved=!c.resolved;save();render();}
+}
+function deleteComment(branchId,cid){
+  const b=branchById(branchId);b.comments=b.comments.filter(x=>x.id!==cid);save();render();
+}
+function publishNow(text,name){          // solo Admin: crea rama, se la asigna y la publica al instante
+  const id=proposeBranch(text,name,S.currentUserId);
+  mergeBranch(id);
+}
+function saveBranchEdit(branchId,text){
+  const b=branchById(branchId);b.text=text;S.editing=false;save();render();
+}
+function mergeBranch(branchId){
+  const b=branchById(branchId);if(b.status!=="open")return;
+  if(!canPublish(S.currentUserId)){alert("Tu rol (Editor) no puede publicar. Asigna la rama a un Admin para que la apruebe.");return;}
+  const n=lastN()+1;
+  S.main.push({id:"v"+n,n,label:b.name,author:b.author,ts:Date.now(),text:b.text,mergedFrom:b.id});
+  b.status="merged";b.approvedBy=S.currentUserId;b.approvedTs=Date.now();b.mergedToN=n;
+  S.sel={type:"main",id:"v"+n};save();render();
+}
+function rejectBranch(branchId){
+  const b=branchById(branchId);if(b.status!=="open")return;
+  if(!canPublish(S.currentUserId)){alert("Solo un Admin puede rechazar una propuesta.");return;}
+  b.status="rejected";b.approvedBy=S.currentUserId;b.approvedTs=Date.now();save();render();
+}
+
+/* ============================================================
+   RENDER SIDEBAR
+   ============================================================ */
+function avatarHtml(uid){const u=userById(uid);return `<span class="avatar" style="background:${u.color}">${initials(u.name)}</span>`;}
+
+function nodeMain(v,selId){
+  const u=userById(v.author);
+  const tag=v.n===lastN()?'<span class="vtag">ACTUAL</span>':'';
+  const merged=v.mergedFrom?` · fusiona ${esc(branchById(v.mergedFrom)?.name||"rama")}`:'';
+  return `<div class="node commit ${selId===v.id?'sel':''}" data-type="main" data-id="${v.id}">
+    <span class="dot"></span>
+    <div class="ntitle">v${v.n} · ${esc(v.label)} ${tag}</div>
+    <div class="nmeta">${avatarHtml(v.author)} ${esc(u.name)} · ${fmtDate(v.ts)}${merged}</div>
+  </div>`;
+}
+function nodeBranch(b,selId){
+  const u=userById(b.author);
+  const assignee=b.assignedTo?userById(b.assignedTo):null;
+  const assignLine=b.status==="open"&&assignee?`<div class="nmeta">→ revisa ${avatarHtml(b.assignedTo)} ${esc(assignee.name)} <span style="opacity:.7">(Admin)</span></div>`:'';
+  return `<div class="node branchnode ${b.status==='merged'?'mergenode':''} ${selId===b.id?'sel':''}" data-type="branch" data-id="${b.id}">
+    <span class="dot"></span>
+    <div class="ntitle">⑂ ${esc(b.name)} <span class="status ${b.status}">${b.status==='open'?'abierta':b.status==='merged'?'fusionada':'rechazada'}</span></div>
+    <div class="nmeta">${avatarHtml(b.author)} ${esc(u.name)} · parte de v${b.baseN} · ${fmtDate(b.createdTs)}</div>
+    ${assignLine}
+  </div>`;
+}
+
+function renderSidebar(){
+  const sel=S.sel.id;
+  if(S.tab==="cronologia"){
+    const ev=[];
+    S.main.forEach(v=>ev.push({ts:v.ts,html:nodeMain(v,sel)}));
+    S.branches.forEach(b=>{
+      ev.push({ts:b.createdTs,html:nodeBranch(b,sel)});
+    });
+    ev.sort((x,y)=>y.ts-x.ts);
+    return `<div style="position:relative"><div class="spine"></div>${ev.map(e=>e.html).join("")}</div>`;
+  }
+  // ramas
+  let html=`<div class="group-label">Principal</div><div style="position:relative"><div class="spine"></div>`;
+  [...S.main].reverse().forEach(v=>{
+    html+=nodeMain(v,sel);
+    const attached=S.branches.filter(b=>b.baseN===v.n);
+    if(attached.length){
+      html+=`<div class="branch-attach">${attached.map(b=>nodeBranch(b,sel)).join("")}</div>`;
+    }
+  });
+  html+=`</div>`;
+  const open=S.branches.filter(b=>b.status==="open");
+  html+=`<div class="group-label" style="margin-top:16px">Ramas abiertas (${open.length})</div>`;
+  html+= open.length?open.map(b=>nodeBranch(b,sel)).join(""):`<div class="empty">No hay ramas pendientes de revisión.</div>`;
+  return html;
+}
+
+/* ============================================================
+   RENDER MAIN PANEL
+   ============================================================ */
+function renderCtxAndStage(){
+  const ctx=document.getElementById("ctxbar");
+  const stage=document.getElementById("stage");
+  const editBtn=document.getElementById("editBtn");
+
+  // ----- EDICIÓN -----
+  if(S.editing){
+    editBtn.style.display="none";
+    const isBranchEdit=S.sel.type==="branch";
+    const startText = isBranchEdit?branchById(S.sel.id).text:findText(S.sel);
+    ctx.innerHTML=`<span class="who">${avatarHtml(S.currentUserId)} ${esc(userById(S.currentUserId).name)}</span>
+      <span style="color:var(--muted)">está editando ${isBranchEdit?`la rama <b>${esc(branchById(S.sel.id).name)}</b>`:`desde <b>v${mainHead().n}</b> (principal)`}</span>`;
+    stage.innerHTML=`
+      <div class="editor">
+        ${toolbarHtml()}
+        <div class="rte" id="ta" contenteditable="true" spellcheck="true">${startText}</div>
+        <div class="editor-foot" id="foot"></div>
+      </div>
+      <p class="hint" id="hint"></p>`;
+    wireToolbar();
+    const foot=document.getElementById("foot");
+    if(isBranchEdit){
+      foot.innerHTML=`<button class="success" id="saveBranch">Guardar cambios en la rama</button>
+        <button class="secondary" id="cancel">Cancelar</button>`;
+      document.getElementById("saveBranch").onclick=()=>saveBranchEdit(S.sel.id,getEditorHtml());
+      document.getElementById("hint").textContent="Estás trabajando en una rama. Estos cambios no afectan a «principal» hasta que un Admin los apruebe y publique.";
+    }else{
+      const isAdmin=canPublish(S.currentUserId);
+      const assignOpts=admins().map(a=>`<option value="${a.id}" ${a.id===(isAdmin?S.currentUserId:admins()[0].id)?'selected':''}>${a.name}</option>`).join("");
+      foot.innerHTML=`
+        <input type="text" id="bname" placeholder="Nombre de la propuesta (ej. «correcciones-de-cifras»)">
+        <label style="font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px">Asignar a <select id="assign" style="font:inherit;padding:7px;border:1px solid var(--line);border-radius:8px">${assignOpts}</select></label>
+        ${isAdmin?'<button class="success" id="publishNow">✓ Publicar ahora</button>':''}
+        <button class="primary" id="propose">Proponer y asignar</button>
+        <button class="secondary" id="cancel">Cancelar</button>`;
+      const txt=()=>getEditorHtml();
+      const bname=()=>document.getElementById("bname").value.trim()||("propuesta-"+userById(S.currentUserId).name.toLowerCase());
+      document.getElementById("propose").onclick=()=>proposeBranch(txt(),bname(),document.getElementById("assign").value);
+      if(isAdmin)document.getElementById("publishNow").onclick=()=>{
+        if(confirm("Como Admin, esto crea la propuesta y la publica directamente en principal. ¿Continuar?"))publishNow(txt(),bname());
+      };
+      document.getElementById("hint").innerHTML=isAdmin
+        ? "Eres <b>Admin</b>: puedes <b>publicar ahora</b> (tu propuesta se aprueba y fusiona al instante) o <b>proponer y asignar</b> a otro Admin para que la revise."
+        : "Eres <b>Editor</b>: solo puedes proponer cambios en una rama y asignarlos a un <b>Admin</b>. La publicación la hace el Admin al aprobar.";
+    }
+    document.getElementById("cancel").onclick=()=>{S.editing=false;render();};
+    return;
+  }
+
+  editBtn.style.display="";
+
+  // ----- VISTA RAMA -----
+  if(S.sel.type==="branch"){
+    const b=branchById(S.sel.id);
+    const baseV=mainByN(b.baseN);
+    const headMoved=mainHead().n!==b.baseN;
+    const u=userById(b.author);
+    const isAdmin=canPublish(S.currentUserId);
+    const assignee=b.assignedTo?userById(b.assignedTo):null;
+    let actions="";
+    if(b.status==="open"){
+      if(isAdmin){
+        actions=`<button class="success" id="approve">✓ Aprobar y publicar</button>
+          <button class="danger" id="reject">Rechazar</button>
+          <button class="secondary" id="editBranchBtn">✎ Editar rama</button>`;
+      }else{
+        actions=`<span class="warn">🔒 Solo un Admin puede aprobar${assignee?` · asignada a ${esc(assignee.name)}`:''}</span>
+          <button class="secondary" id="editBranchBtn">✎ Editar rama</button>`;
+      }
+    }else if(b.status==="merged"){
+      actions=`<span class="pill same">Publicada en v${b.mergedToN} por ${esc(userById(b.approvedBy).name)}</span>`;
+    }else{
+      actions=`<span class="pill same">Rechazada por ${esc(userById(b.approvedBy).name)}</span>`;
+    }
+    ctx.innerHTML=`<span class="who">⑂ ${esc(b.name)}</span>
+      <span class="status ${b.status}">${b.status==='open'?'abierta':b.status==='merged'?'fusionada':'rechazada'}</span>
+      <span style="color:var(--muted)">${avatarHtml(b.author)} ${esc(u.name)} (Editor) · parte de v${b.baseN}${assignee&&b.status==='open'?` · revisa ${esc(assignee.name)}`:''}</span>
+      ${headMoved&&b.status==='open'?`<span class="warn">⚠ principal avanzó a v${mainHead().n}: revisa al publicar</span>`:''}
+      <span class="spacer"></span>${actions}`;
+    const ops=computeDiff(baseV.text,b.text);
+    const diffHtml = S.diffMode==="unified"?renderUnified(ops):renderSplit(ops,`v${baseV.n} (base)`,`rama ${b.name}`);
+    stage.innerHTML=`
+      <div class="review-wrap">
+        <div class="review-main" id="diffContent">${diffHtml}</div>
+        <div class="notes-rail">${renderNotes(b)}</div>
+      </div>
+      <div id="cmtBubble" class="cmt-bubble" style="display:none">💬 Comentar</div>
+      <div id="cmtPop" class="cmt-pop" style="display:none"></div>`;
+    if(b.status==="open"){
+      if(isAdmin){
+        document.getElementById("approve").onclick=()=>{
+          if(confirm(`¿Aprobar la propuesta «${b.name}» y publicarla en principal? Se creará la versión v${lastN()+1}.`))mergeBranch(b.id);
+        };
+        document.getElementById("reject").onclick=()=>{if(confirm("¿Rechazar esta propuesta?"))rejectBranch(b.id);};
+      }
+      document.getElementById("editBranchBtn").onclick=()=>{S.editing=true;render();};
+    }
+    highlightComments(b);
+    wireComments(b);
+    wireNotes(b);
+    return;
+  }
+
+  // ----- VISTA VERSIÓN DE PRINCIPAL -----
+  const v=mainByN(S.sel.id.replace("v",""))||mainByN(parseInt(S.sel.id.slice(1)));
+  const cur=S.main.find(x=>x.id===S.sel.id);
+  const idx=S.main.findIndex(x=>x.id===S.sel.id);
+  const prev=idx>0?S.main[idx-1]:null;
+  const u=userById(cur.author);
+  ctx.innerHTML=`<span class="who">v${cur.n} · ${esc(cur.label)}</span>
+    <span style="color:var(--muted)">${avatarHtml(cur.author)} ${esc(u.name)} · ${fmtDate(cur.ts)}</span>
+    ${cur.mergedFrom?`<span class="pill same">fusionó la rama «${esc(branchById(cur.mergedFrom)?.name||'?')}»</span>`:''}
+    <span class="spacer"></span>
+    <span class="legend"><span><span class="sw del"></span> Eliminado</span><span><span class="sw add"></span> Añadido</span></span>`;
+  if(!prev){
+    stage.innerHTML=`<div class="modal-note">Versión inicial: no hay una versión anterior con la que comparar. Se muestra el texto completo.</div>`+renderRead(cur.text);
+  }else{
+    const ops=computeDiff(prev.text,cur.text);
+    stage.innerHTML = S.diffMode==="unified"?renderUnified(ops)
+      :renderSplit(ops,`v${prev.n} · ${prev.label}`,`v${cur.n} · ${cur.label}`);
+  }
+}
+
+function findText(sel){
+  if(sel.type==="branch")return branchById(sel.id).text;
+  const v=S.main.find(x=>x.id===sel.id);return v?v.text:mainHead().text;
+}
+
+/* ============================================================
+   COMENTARIOS DE REVISIÓN
+   ============================================================ */
+function renderNotes(b){
+  const list=b.comments||[];
+  const open=list.filter(c=>!c.resolved), done=list.filter(c=>c.resolved);
+  const card=c=>{
+    const a=userById(c.author), as=c.assignedTo?userById(c.assignedTo):null;
+    return `<div class="note ${c.resolved?'res':''}" data-cid="${c.id}">
+      <div class="note-top">${avatarHtml(c.author)} <b>${esc(a.name)}</b> <span class="note-date">${fmtDate(c.ts)}</span></div>
+      ${c.quote?`<div class="note-quote">“${esc(c.quote.slice(0,90))}${c.quote.length>90?'…':''}”</div>`:''}
+      <div class="note-text">${esc(c.text)}</div>
+      ${c.link?`<a class="note-link" href="${esc(c.link)}" target="_blank" rel="noopener">🔗 ${esc(c.link)}</a>`:''}
+      ${c.image?`<img class="note-img" src="${c.image}" alt="adjunto">`:''}
+      ${as?`<div class="note-assign">→ ${avatarHtml(c.assignedTo)} ${esc(as.name)}</div>`:''}
+      <div class="note-actions">
+        <button class="linkbtn" data-act="resolve">${c.resolved?'Reabrir':'✓ Resolver'}</button>
+        <button class="linkbtn dgr" data-act="del">Eliminar</button>
+      </div>
+    </div>`;
+  };
+  return `<div class="notes-head">Notas del revisor <span class="count">${open.length}</span></div>
+    <div class="notes-hint">Selecciona texto en el diff para comentar 💬</div>
+    ${open.length?open.map(card).join(''):'<div class="notes-empty">Sin comentarios abiertos.</div>'}
+    ${done.length?`<div class="notes-sub">Resueltos · ${done.length}</div>`+done.map(card).join(''):''}`;
+}
+function wireNotes(b){
+  document.querySelectorAll(".notes-rail .note").forEach(n=>{
+    const cid=n.dataset.cid;
+    n.querySelector('[data-act="resolve"]').onclick=()=>resolveComment(b.id,cid);
+    n.querySelector('[data-act="del"]').onclick=()=>{if(confirm("¿Eliminar este comentario?"))deleteComment(b.id,cid);};
+    n.onmouseenter=()=>{const m=document.querySelector(`.cmt-hl[data-cid="${cid}"]`);if(m)m.classList.add("focus");};
+    n.onmouseleave=()=>{const m=document.querySelector(`.cmt-hl[data-cid="${cid}"]`);if(m)m.classList.remove("focus");};
+  });
+}
+function highlightComments(b){
+  const root=document.getElementById("diffContent");if(!root)return;
+  (b.comments||[]).forEach(c=>{ if(c.quote) wrapFirstMatch(root,c.quote,c.id,c.resolved); });
+}
+function wrapFirstMatch(root,quote,cid,resolved){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null);
+  let node;
+  while(node=walker.nextNode()){
+    const idx=node.textContent.indexOf(quote);
+    if(idx>=0 && node.parentNode && !(node.parentNode.closest&&node.parentNode.closest(".cmt-hl"))){
+      try{
+        const range=document.createRange();
+        range.setStart(node,idx);range.setEnd(node,idx+quote.length);
+        const mark=document.createElement("mark");
+        mark.className="cmt-hl"+(resolved?" res":"");mark.dataset.cid=cid;
+        range.surroundContents(mark);
+      }catch(e){}
+      return;
+    }
+  }
+}
+function wireComments(b){
+  const content=document.getElementById("diffContent");
+  const bubble=document.getElementById("cmtBubble");
+  const host=document.getElementById("stage");
+  if(!content||!bubble||!host)return;
+  host.style.position="relative";
+  let pending=null;
+  const hide=()=>{bubble.style.display="none";};
+  content.addEventListener("mouseup",()=>{
+    setTimeout(()=>{
+      const sel=window.getSelection();
+      const txt=sel&&sel.toString().trim();
+      if(!txt||txt.length<2||!content.contains(sel.anchorNode)){hide();return;}
+      const rect=sel.getRangeAt(0).getBoundingClientRect();
+      const hr=host.getBoundingClientRect();
+      pending=txt;
+      bubble.style.left=(rect.left-hr.left+rect.width/2-55)+"px";
+      bubble.style.top=(rect.top-hr.top-42)+"px";
+      bubble.style.display="block";
+    },10);
+  });
+  bubble.onclick=()=>{ if(pending){openComposer(b,pending,bubble.style.left,bubble.style.top);hide();} };
+}
+function openComposer(b,quote,left,top){
+  const pop=document.getElementById("cmtPop");
+  const opts=USERS.map(u=>`<option value="${u.id}">${u.name} · ${ROLE_LABEL[u.role]}</option>`).join("");
+  pop.innerHTML=`
+    <div class="pop-quote">“${esc(quote.slice(0,120))}${quote.length>120?'…':''}”</div>
+    <textarea id="cmtText" placeholder="Comenta o propón un cambio…"></textarea>
+    <label class="pop-assign">Asignar a
+      <select id="cmtAssign"><option value="">— nadie —</option>${opts}</select>
+    </label>
+    <div class="pop-attach">
+      <button class="chipbtn" id="cmtLinkBtn">🔗 Enlace</button>
+      <label class="chipbtn" for="cmtImg">📎 Imagen</label>
+      <input type="file" id="cmtImg" accept="image/*" hidden>
+      <span id="cmtAttachInfo" class="attach-info"></span>
+    </div>
+    <div class="pop-actions">
+      <button class="primary" id="cmtSave">Guardar</button>
+      <button class="secondary" id="cmtCancel">Cancelar</button>
+    </div>`;
+  pop.style.left=Math.max(8,parseFloat(left)-30)+"px";
+  pop.style.top=(parseFloat(top)+36)+"px";
+  pop.style.display="block";
+  let link=null,image=null;
+  document.getElementById("cmtText").focus();
+  document.getElementById("cmtLinkBtn").onclick=()=>{const u=prompt("URL del enlace:","https://");if(u){link=u;document.getElementById("cmtAttachInfo").textContent="🔗 adjuntado";}};
+  document.getElementById("cmtImg").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{image=r.result;document.getElementById("cmtAttachInfo").textContent="📎 "+f.name;};r.readAsDataURL(f);};
+  document.getElementById("cmtCancel").onclick=()=>{pop.style.display="none";};
+  document.getElementById("cmtSave").onclick=()=>{
+    const text=document.getElementById("cmtText").value.trim();
+    if(!text){alert("Escribe un comentario.");return;}
+    addComment(b.id,{quote,text,assignedTo:document.getElementById("cmtAssign").value||null,link,image});
+  };
+}
+
+/* ============================================================
+   RENDER GLOBAL + LISTENERS
+   ============================================================ */
+function render(){
+  // tabs
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===S.tab));
+  document.querySelectorAll("#diffToggle button").forEach(b=>b.classList.toggle("on",b.dataset.mode===S.diffMode));
+  // user select
+  const us=document.getElementById("userSel");
+  us.innerHTML=USERS.map(u=>`<option value="${u.id}" ${u.id===S.currentUserId?'selected':''}>${u.name} · ${ROLE_LABEL[u.role]}</option>`).join("");
+  const rb=document.getElementById("roleBadge");
+  const cu=currentUser();
+  rb.textContent=ROLE_LABEL[cu.role];
+  rb.className="status "+(cu.role==="admin"?"merged":"open");
+  // sidebar
+  document.getElementById("sidebody").innerHTML=renderSidebar();
+  document.querySelectorAll("#sidebody .node").forEach(n=>{
+    n.onclick=()=>{S.sel={type:n.dataset.type,id:n.dataset.id};S.editing=false;save();render();};
+  });
+  // main
+  renderCtxAndStage();
+}
+
+document.getElementById("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;S.tab=b.dataset.tab;save();render();};
+document.getElementById("diffToggle").onclick=e=>{const b=e.target.closest("button");if(!b)return;S.diffMode=b.dataset.mode;save();render();};
+document.getElementById("userSel").onchange=e=>{S.currentUserId=e.target.value;save();render();};
+document.getElementById("editBtn").onclick=()=>{
+  // editar siempre parte de la versión/rama seleccionada; si es una versión antigua, editar arranca desde principal
+  if(S.sel.type==="main"&&S.sel.id!==mainHead().id){S.sel={type:"main",id:mainHead().id};}
+  S.editing=true;render();
+};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("¿Restaurar los datos de ejemplo y borrar tus cambios locales?"))reset();};
+
+/* init */
+load();render();
+</script>
+</body>
+</html>
