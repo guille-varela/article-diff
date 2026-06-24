@@ -7,7 +7,9 @@ Son páginas HTML autónomas (sin build, sin dependencias): basta abrirlas en el
 
 - **`editor-versiones.html`** — Editor de artículos con versiones y ramas.
 - **`visor-versiones.html`** — Visor para comparar y revisar el historial de versiones.
-- **`index.html`** — Portada con enlaces a ambas vistas.
+- **`prd.html`** — Documentación del producto (PRD) renderizada para el navegador.
+- **`PRD-editor-versiones.md`** — Fuente Markdown del PRD.
+- **`index.html`** — Portada con enlaces a las vistas y a la documentación.
 
 ## Cómo verlo
 
